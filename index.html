@@ -1,47 +1,318 @@
-using UnityEngine;
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>لعبة السرعة الخارقة - BMW وموتوسيكل</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #000;
+      user-select: none;
+    }
+    #ui-container {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 10;
+      direction: rtl;
+    }
+    .hud-box {
+      background: rgba(10, 15, 25, 0.75);
+      border: 1px solid rgba(0, 200, 255, 0.3);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 150, 255, 0.1);
+      backdrop-filter: blur(8px);
+      padding: 14px 20px;
+      border-radius: 12px;
+      color: #fff;
+    }
+    #speed-val {
+      font-size: 38px;
+      font-weight: 900;
+      color: #00e5ff;
+      text-shadow: 0 0 12px rgba(0, 229, 255, 0.8);
+      letter-spacing: 1px;
+    }
+    #vehicle-status {
+      font-size: 16px;
+      color: #ffb703;
+      font-weight: bold;
+      margin-top: 4px;
+    }
+    #switch-btn {
+      background: linear-gradient(135deg, #0077b6, #00b4d8);
+      border: none;
+      color: #fff;
+      padding: 10px 18px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 180, 216, 0.4);
+      transition: all 0.2s;
+    }
+    #switch-btn:hover {
+      background: linear-gradient(135deg, #0096c7, #48cae4);
+      transform: scale(1.03);
+    }
+    #controls-hint {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 20px;
+      padding: 8px 24px;
+      color: #ccc;
+      font-size: 13px;
+      z-index: 10;
+      direction: rtl;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
 
-public class VehicleSwitcher : MonoBehaviour
-{
-    public GameObject carBMW;
-    public GameObject motorBike;
+  <div id="ui-container">
+    <div class="hud-box">
+      <div id="speed-val">0 <span style="font-size: 18px; color: #aaa;">كم/س</span></div>
+      <div id="vehicle-status">المركبة الحالية: سيارة BMW M Series</div>
+    </div>
+    <button id="switch-btn" onclick="toggleVehicle()">تبديل المركبة (اضغط V)</button>
+  </div>
 
-    private bool isCarActive = true;
+  <div id="controls-hint">
+    التحكم: السهم لأعلى / W (تسارع نفاث) | السهم لأسفل / S (فرامل) | الأسهم يمين ويسار / A, D (توجيه)
+  </div>
 
-    void Start()
-    {
-        // نبدأ بالعربية شغالة والموتوسيكل مخفي
-        carBMW.SetActive(true);
-        motorBike.SetActive(false);
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020208);
+    scene.fog = new THREE.FogExp2(0x020208, 0.003);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xaaccff, 1.2);
+    dirLight.position.set(30, 80, 50);
+    scene.add(dirLight);
+
+    const roadWidth = 24;
+    const roadSegments = [];
+    const roadGroup = new THREE.Group();
+    scene.add(roadGroup);
+
+    const roadGeo = new THREE.PlaneGeometry(roadWidth, 200);
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.7, metalness: 0.1 });
+
+    for (let i = 0; i < 10; i++) {
+      const road = new THREE.Mesh(roadGeo, roadMat);
+      road.rotation.x = -Math.PI / 2;
+      road.position.z = -i * 200;
+      roadGroup.add(road);
+      roadSegments.push(road);
     }
 
-    void Update()
-    {
-        // الضغط على حرف V للتبديل بين العربية والموتوسيكل
-        if (Input.GetKeyDown(KeyCode.V))
-        {
-            SwitchVehicle();
-        }
+    function buildBMW() {
+      const car = new THREE.Group();
+      const paint = new THREE.MeshStandardMaterial({ color: 0x0d1b2a, metalness: 0.9, roughness: 0.15 });
+      const carbon = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+      const glass = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.05, metalness: 0.9 });
+      const chrome = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 1.0, roughness: 0.1 });
+      const lightMat = new THREE.MeshBasicMaterial({ color: 0x70d6ff });
+      const tailMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+
+      const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.55, 4.8), paint);
+      chassis.position.y = 0.5;
+      car.add(chassis);
+
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.5, 2.3), glass);
+      cabin.position.set(0, 0.95, -0.2);
+      car.add(cabin);
+
+      const hood = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.25, 1.4), paint);
+      hood.position.set(0, 0.65, -1.5);
+      car.add(hood);
+
+      const grilleL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.22, 0.1), chrome);
+      grilleL.position.set(-0.25, 0.5, -2.42);
+      const grilleR = grilleL.clone();
+      grilleR.position.x = 0.25;
+      car.add(grilleL, grilleR);
+
+      const headL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.1), lightMat);
+      headL.position.set(-0.8, 0.52, -2.41);
+      const headR = headL.clone();
+      headR.position.x = 0.8;
+      car.add(headL, headR);
+
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.1), tailMat);
+      tail.position.set(0, 0.65, 2.41);
+      car.add(tail);
+
+      const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 24);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
+
+      const wFL = new THREE.Mesh(wheelGeo, wheelMat);
+      wFL.position.set(-1.18, 0.42, -1.4);
+      const wFR = wFL.clone(); wFR.position.x = 1.18;
+      const wRL = wFL.clone(); wRL.position.z = 1.4;
+      const wRR = wFR.clone(); wRR.position.z = 1.4;
+      car.add(wFL, wFR, wRL, wRR);
+
+      return car;
     }
 
-    void SwitchVehicle()
-    {
-        isCarActive = !isCarActive;
+    function buildMotorcycle() {
+      const bike = new THREE.Group();
+      const metalRed = new THREE.MeshStandardMaterial({ color: 0xd90429, metalness: 0.85, roughness: 0.2 });
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x1f2421, metalness: 0.9, roughness: 0.3 });
+      const rubber = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.7 });
+      const headLight = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-        if (isCarActive)
-        {
-            // انقل العربية لنفس مكان الموتوسيكل وشغلها
-            carBMW.transform.position = motorBike.transform.position;
-            carBMW.transform.rotation = motorBike.transform.rotation;
-            carBMW.SetActive(true);
-            motorBike.SetActive(false);
-        }
-        else
-        {
-            // انقل الموتوسيكل لنفس مكان العربية وشغله
-            motorBike.transform.position = carBMW.transform.position;
-            motorBike.transform.rotation = carBMW.transform.rotation;
-            motorBike.SetActive(true);
-            carBMW.SetActive(false);
-        }
+      const tank = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.45, 1.1), metalRed);
+      tank.position.set(0, 0.95, -0.1);
+      bike.add(tank);
+
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.8), frameMat);
+      seat.position.set(0, 0.8, 0.6);
+      bike.add(seat);
+
+      const engine = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.5, 0.8), frameMat);
+      engine.position.set(0, 0.55, 0.0);
+      bike.add(engine);
+
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.08), frameMat);
+      handle.position.set(0, 1.15, -0.5);
+      bike.add(handle);
+
+      const light = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 16), headLight);
+      light.position.set(0, 0.95, -0.75);
+      light.rotateX(Math.PI / 2);
+      bike.add(light);
+
+      const bWheelGeo = new THREE.CylinderGeometry(0.44, 0.44, 0.26, 24);
+      bWheelGeo.rotateZ(Math.PI / 2);
+      const frontW = new THREE.Mesh(bWheelGeo, rubber);
+      frontW.position.set(0, 0.44, -1.2);
+      const rearW = new THREE.Mesh(bWheelGeo, rubber);
+      rearW.position.set(0, 0.44, 1.2);
+      bike.add(frontW, rearW);
+
+      return bike;
     }
-}
+
+    const carMesh = buildBMW();
+    const bikeMesh = buildMotorcycle();
+
+    const player = new THREE.Group();
+    player.add(carMesh);
+    player.add(bikeMesh);
+    bikeMesh.visible = false;
+    scene.add(player);
+
+    let isCar = true;
+    const statusText = document.getElementById('vehicle-status');
+
+    function toggleVehicle() {
+      isCar = !isCar;
+      if (isCar) {
+        carMesh.visible = true;
+        bikeMesh.visible = false;
+        statusText.innerText = "المركبة الحالية: سيارة BMW M Series";
+      } else {
+        carMesh.visible = false;
+        bikeMesh.visible = true;
+        statusText.innerText = "المركبة الحالية: موتوسيكل رياضي S1000";
+      }
+    }
+
+    let speedKmh = 0;
+    const MAX_SPEED = 4000;
+    const ACCEL = 35;
+    const BRAKE = 55;
+    const FRICTION = 0.995;
+    let lateralPos = 0;
+    let lateralSpeed = 0;
+
+    const keys = { w: false, s: false, a: false, d: false };
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'v' || e.key === 'V' || e.key === 'ر') toggleVehicle();
+      if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') keys.w = true;
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') keys.s = true;
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.a = true;
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.d = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') keys.w = false;
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') keys.s = false;
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.a = false;
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.d = false;
+    });
+
+    const speedDisplay = document.getElementById('speed-val');
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (keys.w) speedKmh = Math.min(MAX_SPEED, speedKmh + ACCEL);
+      else if (keys.s) speedKmh = Math.max(0, speedKmh - BRAKE);
+      else speedKmh *= FRICTION;
+
+      if (speedKmh < 1) speedKmh = 0;
+
+      const steerPower = Math.min(1.2, speedKmh / 150);
+      if (keys.a) lateralSpeed = -0.35 * steerPower;
+      else if (keys.d) lateralSpeed = 0.35 * steerPower;
+      else lateralSpeed *= 0.85;
+
+      lateralPos += lateralSpeed;
+      lateralPos = Math.max(-roadWidth / 2 + 2, Math.min(roadWidth / 2 - 2, lateralPos));
+      player.position.x = lateralPos;
+
+      const tiltFactor = isCar ? 0.08 : 0.45;
+      player.rotation.z = -lateralSpeed * tiltFactor;
+
+      const moveStep = (speedKmh / 3.6) * 0.08;
+      roadSegments.forEach(seg => {
+        seg.position.z += moveStep;
+        if (seg.position.z > 200) {
+          seg.position.z -= 200 * roadSegments.length;
+        }
+      });
+
+      const speedRatio = speedKmh / MAX_SPEED;
+      const shake = (Math.random() - 0.5) * speedRatio * 0.15;
+      camera.position.set(player.position.x * 0.6 + shake, 3.2 + shake, 7 + speedRatio * 3);
+      camera.lookAt(player.position.x * 0.8, 1.2, -15);
+
+      speedDisplay.innerHTML = `${Math.round(speedKmh)} <span style="font-size: 18px; color: #aaa;">كم/س</span>`;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
