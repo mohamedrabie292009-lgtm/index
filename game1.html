@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>لعبة سيارات - 3D Browser Game</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+      background: #111;
+    }
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 12px 20px;
+      border-radius: 8px;
+      direction: rtl;
+      user-select: none;
+    }
+    #instructions {
+      font-size: 14px;
+      color: #ddd;
+    }
+    #speedometer {
+      font-size: 20px;
+      font-weight: bold;
+      color: #00ffcc;
+      margin-top: 5px;
+    }
+  </style>
+  <!-- مكتبة Three.js ثلاثية الأبعاد -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <div id="ui">
+    <div id="instructions">التحكم: الأسهم أو W, A, S, D</div>
+    <div id="speedometer">السرعة: 0 كم/س</div>
+  </div>
+
+  <script>
+    // 1. إعداد المشهد والكاميرا والمحرك
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb); // لون السماء
+    scene.fog = new THREE.Fog(0x87ceeb, 20, 100);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // 2. الإضاءة
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sunLight.position.set(20, 40, 20);
+    sunLight.castShadow = true;
+    scene.add(sunLight);
+
+    // 3. الأرضية والمضمار
+    const groundGeo = new THREE.PlaneGeometry(300, 300);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // مسار أسفلتي
+    const trackGeo = new THREE.RingGeometry(35, 55, 64);
+    const trackMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.DoubleSide });
+    const track = new THREE.Mesh(trackGeo, trackMat);
+    track.rotation.x = -Math.PI / 2;
+    track.position.y = 0.02;
+    track.receiveShadow = true;
+    scene.add(track);
+
+    // 4. بناء السيارة (مركبة من عدة أشكال هندسية)
+    const car = new THREE.Group();
+
+    // جسم السيارة
+    const bodyGeo = new THREE.BoxGeometry(2, 0.7, 4);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe63946, metalness: 0.5, roughness: 0.2 });
+    const carBody = new THREE.Mesh(bodyGeo, bodyMat);
+    carBody.position.y = 0.6;
+    carBody.castShadow = true;
+    car.add(carBody);
+
+    // السقف والزجاج
+    const cabinGeo = new THREE.BoxGeometry(1.6, 0.6, 2);
+    const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1d3557 });
+    const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+    cabin.position.set(0, 1.2, -0.3);
+    cabin.castShadow = true;
+    car.add(cabin);
+
+    // العجلات
+    const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const wheelPositions = [
+      [-1, 0.4, 1.2],
+      [1, 0.4, 1.2],
+      [-1, 0.4, -1.2],
+      [1, 0.4, -1.2]
+    ];
+
+    wheelPositions.forEach(pos => {
+      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(...pos);
+      wheel.castShadow = true;
+      car.add(wheel);
+    });
+
+    car.position.set(0, 0, 45);
+    scene.add(car);
+
+    // 5. فيزياء التحكم والحركة
+    let speed = 0;
+    let maxSpeed = 0.8;
+    let acceleration = 0.015;
+    let friction = 0.96;
+    let turnSpeed = 0.03;
+    let angle = 0;
+
+    const keys = { forward: false, backward: false, left: false, right: false };
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') keys.forward = true;
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') keys.backward = true;
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.left = true;
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.right = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') keys.forward = false;
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') keys.backward = false;
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.left = false;
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.right = false;
+    });
+
+    // 6. حلقة التحديث المستمر (Game Loop)
+    const speedDisplay = document.getElementById('speedometer');
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // زيادة أو إنقاص السرعة
+      if (keys.forward) speed += acceleration;
+      if (keys.backward) speed -= acceleration * 0.6;
+
+      // تطبيق الاحتكاك والحد الأقصى للسرعة
+      speed *= friction;
+      speed = Math.max(-maxSpeed * 0.4, Math.min(speed, maxSpeed));
+
+      // التوجيه (الدوران يتناسب مع السرعة)
+      if (Math.abs(speed) > 0.002) {
+        const dir = speed > 0 ? 1 : -1;
+        if (keys.left) angle += turnSpeed * dir;
+        if (keys.right) angle -= turnSpeed * dir;
+      }
+
+      // تحريك جسم السيارة
+      car.rotation.y = angle;
+      car.position.x += Math.sin(angle) * speed;
+      car.position.z += Math.cos(angle) * speed;
+
+      // تثبيت الكاميرا خلف السيارة (Third-person view)
+      const cameraOffset = new THREE.Vector3(0, 3, -7);
+      cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+      camera.position.copy(car.position).add(cameraOffset);
+      camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
+
+      // تحديث شاشة السرعة
+      speedDisplay.innerText = `السرعة: ${Math.round(Math.abs(speed) * 120)} كم/س`;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // ملاءمة حجم الشاشة عند تغييرها
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
